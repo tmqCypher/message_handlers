@@ -38,9 +38,9 @@ class TelemetryComposer(Node):
         self._pitch_sub = self.create_subscription(Float64, 'actualPitch',
             self._pitch_sub_callback, 1, callback_group=self._sub_callback_group)
         self._yaw_sub = self.create_subscription(Float64, 'actualYaw',
-            self._yaw_sub_callback, callback_group=self._sub_callback_group)
+            self._yaw_sub_callback, 1, callback_group=self._sub_callback_group)
         self._battery_sub = self.create_subscription(Float64, 'battery',
-            self._battery_sub_callback, callback_group=self._sub_callback_group)
+            self._battery_sub_callback, 1, callback_group=self._sub_callback_group)
 
         # Store sequence of send messages
         self._msg_id = 0
@@ -57,6 +57,9 @@ class TelemetryComposer(Node):
     def _coord_sub_callback(self, msg):
         self.telem.position.latitude = msg.lat
         self.telem.position.longitude = msg.lon
+
+    def _depth_sub_callback(self, msg):
+        self.telem.position.depth = msg.data
 
     def _roll_sub_callback(self, msg):
         self.telem.pose.roll = msg.data
