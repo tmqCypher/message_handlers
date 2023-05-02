@@ -3,8 +3,8 @@ from rclpy.callback_groups import MutuallyExclusiveCallbackGroup, ReentrantCallb
 from rclpy.executors import Executor, MultiThreadedExecutor
 from rclpy.node import Node
 
-from gps_interfaces.msg import Coordinates
-from rfm9x_interfaces.msg import Payload, ID
+from robosub_interfaces.msg import Position, RFM9xPayload, ID
+from std_msgs.msg import Float64
 
 from robosub_messagers.robosub_pb2 import TelemetryMessage
 
@@ -28,26 +28,25 @@ class TelemetryComposer(Node):
         self._resend_sub = self.create_subscription(ID, 'resend_request',
                 self._resend_sub_callback, 1, callback_group=self._sub_callback_group)
         # Data subscriptions
-        self._coord_sub = self.create_subscription(Coordinates, 'coordinates',
+        self._coord_sub = self.create_subscription(Position, 'coordinates',
                 self._coord_sub_callback, 1, callback_group=self._sub_callback_group)
-        '''
-        self.depth_client = self.create_client(Depth, 'depth',
-            callback_group=self.parallel_client_group)
-        self.battery_client = self.create_client(Battery, 'battery',
-            callback_group=self.parallel_client_group)
-        self.roll_client = self.create_client(Roll, 'aroll',
-            callback_group=self.attitude_client_group)
-        self.pitch_client = self.create_client(Pitch, 'apitch',
-            callback_group=self.attitude_client_group)
-        self.yaw_client = self.create_client(Yaw, 'ayaw',
-            callback_group=self.attitude_client_group)
-        '''
+        
+        self._depth_sub = self.create_subscription(Float64, 'depth',
+            self._depth_sub_callback, 1, callback_group=self._sub_callback_group)
+        self._roll_sub = self.create_subscription(Float64, 'actualRoll',
+            self._roll_sub_callback, 1, callback_group=self._sub_callback_group)
+        self._pitch_sub = self.create_subscription(Float64, 'actualPitch',
+            self._pitch_sub_callback, 1, callback_group=self._sub_callback_group)
+        self._yaw_sub = self.create_subscription(Float64, 'actualYaw',
+            self._yaw_sub_callback, callback_group=self._sub_callback_group)
+        self._battery_sub = self.create_subscription(Float64, 'battery',
+            self._battery_sub_callback, callback_group=self._sub_callback_group)
 
         # Store sequence of send messages
         self._msg_id = 0
         self.telem = TelemetryMessage()
         # Publish telemetry data for radio controller
-        self._telem_pub = self.create_publisher(Payload, 'telem_data', 1)
+        self._telem_pub = self.create_publisher(RFM9xPayload, 'telem_data', 1)
         # ...at intervals of 2 seconds
         self._pub_timer = self.create_timer(2.0, self._pub_timer_callback, self._timer_callback_group)
 
@@ -59,12 +58,16 @@ class TelemetryComposer(Node):
         self.telem.position.latitude = msg.lat
         self.telem.position.longitude = msg.lon
 
-    def _pose_sub_callback(self, msg):
-        self.telem.pose.pitch = msg.pitch
-        self.telem.pose.roll = msg.roll
-        self.telem.pose.yaw = msg.yaw
+    def _roll_sub_callback(self, msg):
+        self.telem.pose.roll = msg.data
+        
+    def _pitch_sub_callback(self, msg):
+        self.telem.pose.pitch = msg.data
+        
+    def _yaw_sub_callback(self, msg):
+        self.telem.pose.yaw = msg.data
 
-    def _bat_sub_callback(self, msg):
+    def _battery_sub_callback(self, msg):
         self.telem.battery = msg.battery
 
     def _pub_timer_callback(self):
@@ -72,7 +75,7 @@ class TelemetryComposer(Node):
         self._msg_id += 1
 
         telem_data = [byte for byte in self.telem.SerializeToString()]
-        self._telem_pub.publish(Payload(payload=telem_data))
+        self._telem_pub.publish(RFM9xPayload(payload=telem_data))
         self.log.info(f'Published:\n{self.telem}')
 
         # Reset resend flag

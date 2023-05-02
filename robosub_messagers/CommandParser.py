@@ -3,7 +3,7 @@ from rclpy.callback_groups import MutuallyExclusiveCallbackGroup, ReentrantCallb
 from rclpy.executors import Executor, MultiThreadedExecutor
 from rclpy.node import Node
 
-from rfm9x_interfaces.msg import Payload, ID
+from robosub_interfaces.msg import RFM9xPayload, ID
 from robosub_messagers.robosub_pb2 import ControllerMessage
 
 
@@ -25,7 +25,7 @@ class CommandParser(Node):
         self._latest_received = -1
         self._latest_handled = -1
 
-        self._cmd_sub = self.create_subscription(Payload, 'cmd_data',
+        self._cmd_sub = self.create_subscription(RFM9xPayload, 'cmd_data',
                 self._cmd_sub_callback, 10)
         self._resend_pub = self.create_publisher(ID, 'resend_request', 1)
 
