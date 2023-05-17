@@ -3,10 +3,11 @@ from rclpy.callback_groups import MutuallyExclusiveCallbackGroup, ReentrantCallb
 from rclpy.executors import Executor, MultiThreadedExecutor
 from rclpy.node import Node
 
-from robosub_interfaces.msg import Position, RFM9xPayload, ID
 from std_msgs.msg import Float64
-
+from geometry_msgs.msg import Point
+from robosub_interfaces.msg import RFM9xPayload, ID
 from robosub_messagers.robosub_pb2 import TelemetryMessage
+
 
 
 class TelemetryComposer(Node):
@@ -28,9 +29,8 @@ class TelemetryComposer(Node):
         self._resend_sub = self.create_subscription(ID, 'resend_request',
                 self._resend_sub_callback, 1, callback_group=self._sub_callback_group)
         # Data subscriptions
-        self._coord_sub = self.create_subscription(Position, 'coordinates',
+        self._coord_sub = self.create_subscription(Point, 'currentGPSPosition',
                 self._coord_sub_callback, 1, callback_group=self._sub_callback_group)
-        
         self._depth_sub = self.create_subscription(Float64, 'depth',
             self._depth_sub_callback, 1, callback_group=self._sub_callback_group)
         self._roll_sub = self.create_subscription(Float64, 'actualRoll',
@@ -39,7 +39,7 @@ class TelemetryComposer(Node):
             self._pitch_sub_callback, 1, callback_group=self._sub_callback_group)
         self._yaw_sub = self.create_subscription(Float64, 'actualYaw',
             self._yaw_sub_callback, 1, callback_group=self._sub_callback_group)
-        self._battery_sub = self.create_subscription(Float64, 'battery',
+        self._battery_sub = self.create_subscription(Float64, 'batteryPercentage',
             self._battery_sub_callback, 1, callback_group=self._sub_callback_group)
 
         # Store sequence of send messages
@@ -55,8 +55,8 @@ class TelemetryComposer(Node):
         self.telem.resend = msg.id
 
     def _coord_sub_callback(self, msg):
-        self.telem.position.latitude = msg.lat
-        self.telem.position.longitude = msg.lon
+        self.telem.position.latitude = msg.x
+        self.telem.position.longitude = msg.y
 
     def _depth_sub_callback(self, msg):
         self.telem.position.depth = msg.data
@@ -71,7 +71,7 @@ class TelemetryComposer(Node):
         self.telem.pose.yaw = msg.data
 
     def _battery_sub_callback(self, msg):
-        self.telem.battery = msg.battery
+        self.telem.battery = msg.data
 
     def _pub_timer_callback(self):
         self.telem.id = self._msg_id

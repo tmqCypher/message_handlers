@@ -3,8 +3,11 @@ from rclpy.callback_groups import MutuallyExclusiveCallbackGroup, ReentrantCallb
 from rclpy.executors import Executor, MultiThreadedExecutor
 from rclpy.node import Node
 
+from std_msgs.msg import Bool, Float64
+from geometry_msgs.msg import Point
 from robosub_interfaces.msg import RFM9xPayload, ID
-from robosub_messagers.robosub_pb2 import ControllerMessage
+from robosub_messagers.robosub_pb2 import ControllerMessage, WayPoint
+from robosub_messagers.robosub_pb2 import PathCommand, TraverseCommand
 
 
 class CommandParser(Node):
@@ -24,10 +27,18 @@ class CommandParser(Node):
         self._commands: dict[int, ControllerMessage] = {}
         self._latest_received = -1
         self._latest_handled = -1
-
         self._cmd_sub = self.create_subscription(RFM9xPayload, 'cmd_data',
                 self._cmd_sub_callback, 10)
         self._resend_pub = self.create_publisher(ID, 'resend_request', 1)
+
+        # Record the waypoint path and feed it to the sub
+        self._paused = False
+        self._waypoints: list[WayPoint] = []
+        self._current_waypoint_idx = 0
+        self._wp_req_sub = self.create_subscription(Bool, 'requestNewWaypoint',
+                self._wp_req_sub_callback, 10)
+        self._wp_req_pub = self.create_publisher(Point, 'waypoint', 1)
+
 
     def _timer_callback(self):
         '''Handle queued commands'''
@@ -38,10 +49,45 @@ class CommandParser(Node):
             self._latest_handled += 1
             msg = self._commands[self._latest_handled]
             del(self._commands[self._latest_handled])
-            
-            # TODO: Placeholder until we get coordinated with engineers
-            self.log.info(f'Handling controller message:\n{msg}')
 
+            # Check message for path modification commands
+            if msg.path_cmd == PathCommand.PATH_CLEAR:
+                self._waypoints = []
+                self._current_waypoint_idx = 0
+                self.log.info('Cleared waypoint path')
+            elif msg.path_cmd == PathCommand.PATH_ADD:
+                self._waypoints.append(msg.waypoint)
+                self.log.info(f'Added waypoint to path: {msg.waypoint}')
+
+            # Check message for traversal commands
+            if msg.traverse_cmd == TraverseCommand.TRAVERSE_START:
+                self._paused = False
+                self.log.info('Traversal started')
+            elif msg.traverse_cmd == TraverseCommand.TRAVERSE_PAUSE:
+                self._paused = True
+                self.log.info('Traversal paused')
+            elif msg.traverse_cmd == TraverseCommand.TRAVERSE_STOP:
+                self.paused = True
+                self._current_waypoint_idx = 0
+                self.log.info('Traversal stopped')
+                
+                
+    def _wp_req_sub_callback(self, msg):
+        '''If there's a waypoint left in the path, send it to the sub'''
+        if self._paused:
+            self.log.debug('Sub requested waypoint, but traversal is paused')
+        elif self._current_waypoint_idx >= len(self._waypoints):
+            self.log.debug('Sub requested waypoint, but there\'s no waypoint to send')
+        else:
+            # NOTE: This currently just handles sending positions. It should
+            # eventually handle waypoint commands like operating the camera/sensors.
+            self._current_waypoint_idx += 1
+            wp = self._waypoints[self._current_waypoint_idx]
+            self._wp_req_pub.publish(Point(x=wp.position.latitude,
+                                           y=wp.position.longitude,
+                                           z=wp.position.depth))
+
+            
     def _cmd_sub_callback(self, msg):
         '''Parse and queue the commands in the message'''
         ctrl_msg = ControllerMessage()
