@@ -35,6 +35,7 @@ class CommandParser(Node):
         self._paused = False
         self._waypoints: list[WayPoint] = []
         self._current_waypoint_idx = 0
+        self._wp_req_status = False
         self._wp_req_sub = self.create_subscription(Bool, 'requestNewWaypoint',
                 self._wp_req_sub_callback, 10)
         self._wp_req_pub = self.create_publisher(Point, 'waypoint', 1)
@@ -51,25 +52,27 @@ class CommandParser(Node):
             del(self._commands[self._latest_handled])
 
             # Check message for path modification commands
-            if msg.path_cmd == PathCommand.PATH_CLEAR:
-                self._waypoints = []
-                self._current_waypoint_idx = 0
-                self.log.info('Cleared waypoint path')
-            elif msg.path_cmd == PathCommand.PATH_ADD:
-                self._waypoints.append(msg.waypoint)
-                self.log.info(f'Added waypoint to path: {msg.waypoint}')
+            match(msg.path_cmd):
+                case PathCommand.PATH_CLEAR:
+                    self._waypoints = []
+                    self._current_waypoint_idx = 0
+                    self.log.info('Cleared waypoint path')
+                case PathCommand.PATH_ADD:
+                    self._waypoints.append(msg.waypoint)
+                    self.log.info(f'Added waypoint to path: {msg.waypoint}')
 
             # Check message for traversal commands
-            if msg.traverse_cmd == TraverseCommand.TRAVERSE_START:
-                self._paused = False
-                self.log.info('Traversal started')
-            elif msg.traverse_cmd == TraverseCommand.TRAVERSE_PAUSE:
-                self._paused = True
-                self.log.info('Traversal paused')
-            elif msg.traverse_cmd == TraverseCommand.TRAVERSE_STOP:
-                self.paused = True
-                self._current_waypoint_idx = 0
-                self.log.info('Traversal stopped')
+            match(msg.traverse_cmd):
+                case TraverseCommand.TRAVERSE_START:
+                    self._paused = False
+                    self.log.info('Traversal started')
+                case TraverseCommand.TRAVERSE_PAUSE:
+                    self._paused = True
+                    self.log.info('Traversal paused')
+                case TraverseCommand.TRAVERSE_STOP:
+                    self.paused = True
+                    self._current_waypoint_idx = 0
+                    self.log.info('Traversal stopped')
                 
                 
     def _wp_req_sub_callback(self, msg):
@@ -78,7 +81,7 @@ class CommandParser(Node):
             self.log.debug('Sub requested waypoint, but traversal is paused')
         elif self._current_waypoint_idx >= len(self._waypoints):
             self.log.debug('Sub requested waypoint, but there\'s no waypoint to send')
-        else:
+        elif msg.data and not self._wp_req_status:
             # NOTE: This currently just handles sending positions. It should
             # eventually handle waypoint commands like operating the camera/sensors.
             self._current_waypoint_idx += 1
@@ -86,6 +89,7 @@ class CommandParser(Node):
             self._wp_req_pub.publish(Point(x=wp.position.latitude,
                                            y=wp.position.longitude,
                                            z=wp.position.depth))
+        self._wp_req_status = msg.data
 
             
     def _cmd_sub_callback(self, msg):
