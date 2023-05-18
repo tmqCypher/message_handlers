@@ -16,10 +16,9 @@ class SocketTranslator(Node):
         super().__init__(node_name='socket_translator', parameter_overrides=[])
         self.log = self.get_logger()
 
+        self._sock: socket.socket
         self.SOCKET_PORT = 10000
         self._connected = False
-        self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self._sock.bind(('', self.SOCKET_PORT))
         self._sock_timer = self.create_timer(0.25, self._sock_timer_callback, MutuallyExclusiveCallbackGroup())
 
         self._out_data = {}
@@ -28,7 +27,6 @@ class SocketTranslator(Node):
         self._currentGPSPosition_sub = self.create_subscription(Point, 'currentGPSPosition',
             lambda msg: self._out_data.update(currentGPSPosition=point_to_tuple(msg)), 10)
 
-        self._in_data = {}
         self._actualPitch_pub = self.create_publisher(Float64, 'actualPitch', 10)
         self._actualRoll_pub = self.create_publisher(Float64, 'actualRoll', 10)
         self._actualYaw_pub = self.create_publisher(Float64, 'actualYaw', 10)
@@ -56,30 +54,30 @@ class SocketTranslator(Node):
     def _relay_data(self):
         # Receive incoming data
         try:
-            self._in_data = pickle.loads(self._sock.recv(2048))
-            if 'actualPitch' in self._in_data:
-                self._actualPitch_pub.publish(Float64(data=self._in_data['actualPitch']))
-            if 'actualRoll' in self._in_data:
-                self._actualRoll_pub.publish(Float64(data=self._in_data['actualRoll']))
-            if 'actualYaw' in self._in_data:
-                self._actualYaw_pub.publish(Float64(data=self._in_data['actualYaw']))
-            if 'depth' in self._in_data:
-                self._depth_pub.publish(Float64(data=self._in_data['depth']))
-            if 'requestNewWaypoint' in self._in_data:
+            msg = pickle.loads(self._sock.recv(2048))
+            if 'actualPitch' in msg:
+                self._actualPitch_pub.publish(Float64(data=msg['actualPitch']))
+            if 'actualRoll' in msg:
+                self._actualRoll_pub.publish(Float64(data=msg['actualRoll']))
+            if 'actualYaw' in msg:
+                self._actualYaw_pub.publish(Float64(data=msg['actualYaw']))
+            if 'depth' in msg:
+                self._depth_pub.publish(Float64(data=msg['depth']))
+            if 'requestNewWaypoint' in msg:
                 self._requestNewWaypoint_pub.publish(Bool())
-        except socket.timeout:
-            pass
         except pickle.PickleError:
             self.log.error('Pickling error')
+        except socket.timeout:
+            pass
             
         # Send outgoing data
         try:
             self._sock.sendall(pickle.dumps(self._out_data))
             self._out_data = {}
-        except socket.timeout:
-            pass
         except pickle.PickleError:
             self.log.error('Pickling error')
+        except socket.timeout:
+            pass
 
         
 def point_to_tuple(p): return (p.x, p.y, p.z)
