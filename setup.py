@@ -22,6 +22,7 @@ setup(
         'console_scripts': [
             'telemetry_composer = robosub_messagers.TelemetryComposer:main',
             'command_parser = robosub_messagers.CommandParser:main',
+            'socket_translator = robosub_messagers.SocketTranslator:main',
         ],
     },
 )
